@@ -58,14 +58,28 @@ export async function getAllBookings(): Promise<Booking[]> {
 }
 
 export async function getBookingsByPhone(phone: string): Promise<Booking[]> {
-  const snap = await getDocs(
-    query(
-      collection(db, COL),
-      where("phoneNumber", "==", phone.trim()),
-      orderBy("createdAt", "desc"),
-    ),
-  );
-  return snap.docs.map((d) => toBooking(d.id, d.data()));
+  const cleanPhone = phone.trim();
+  try {
+    // Try the targeted where query first
+    const snap = await getDocs(
+      query(collection(db, COL), where("phoneNumber", "==", cleanPhone)),
+    );
+    return snap.docs
+      .map((d) => toBooking(d.id, d.data()))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  } catch (err) {
+    console.warn(
+      "phoneNumber where query failed, falling back to full scan:",
+      err,
+    );
+    // Fallback: fetch all bookings and filter client-side
+    // This works regardless of Firestore indexes
+    const snap = await getDocs(collection(db, COL));
+    return snap.docs
+      .map((d) => toBooking(d.id, d.data()))
+      .filter((b) => b.phoneNumber === cleanPhone)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
 }
 
 export async function getBookingsByDate(date: string): Promise<Booking[]> {
